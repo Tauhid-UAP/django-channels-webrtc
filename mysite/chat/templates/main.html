@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Django Channels WebRTC</title>
+	
+</head>
+<body>
+	<h3>USERNAME</h3>
+	<div>
+		<input id="username"><button id="btn-join">Join Room</button>
+	</div>
+	<h3> CHAT </h3>
+	<div id="chat">
+		<div id="messages">
+			<ul id="message-list"></ul>
+		</div>
+		<div id="ct"><input id="msg"><button id="btn-send-msg">send</button></div>
+	</div>
+    {% block content %}
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,135 @@
+{% extends 'main.html' %}
+
+{% block content %}
+    <!-- <button id="btn-get-offer">Get Offer SDP</button>
+    <button id="btn-send-answer">Send Answer SDP</button> -->
+
+    <script type="text/javascript">
+
+        var loc = window.location;
+
+        var endPoint = '';
+        var wsStart = 'ws://';
+
+        if(loc.protocol == 'https'){
+            wsStart = 'wss://';
+        }
+
+        var endPoint = wsStart + loc.host + loc.pathname;
+
+        var webSocket = new WebSocket(endPoint);
+
+        webSocket.onopen = function(e){
+            console.log('Connection opened! ', e);
+            // webSocket.send(
+            //     json_data = JSON.stringify(
+            //         {
+            //             'message': 'Hello',
+            //         }
+            //     )
+            // );
+        }
+
+        webSocket.onmessage = webSocketOnMessage;
+
+        webSocket.onclose = function(e){
+            console.log('Connection closed! ', e);
+        }
+
+        webSocket.onerror = function(e){
+            console.log('Error occured! ', e);
+        }
+
+        // var btnGetOffer = document.querySelector('#btn-get-offer');
+        // var btnSendAnswer = document.querySelector('#btn-send-answer');
+
+        // btnGetOffer.onclick = btnGetOfferOnClick;
+        
+        const peer2 = new RTCPeerConnection();
+
+        peer2.onicecandidate = e => console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
+
+        peer2.ondatachannel = e => {
+            peer2.dc = e.channel;
+            // peer2.dc.onmessage = e => console.log("New message: ", e.data);
+            peer2.dc.onmessage = dcOnMessage;
+            peer2.dc.onopen = e => console.log("Connection opened.");
+        }
+
+        function webSocketOnMessage(event){
+            var parsed_data = JSON.parse(event.data);
+
+            console.log('parsed_data.type: ', parsed_data['message']['type']);
+
+            // return if type == answer
+            // to avoid setting wrong sdp
+            // as answer will be sent by this peer
+            if(parsed_data['message']['type'] == 'answer'){
+                return;
+            }
+
+            const offer = parsed_data['message'];
+            console.log('offer: ', offer);
+            peer2.setRemoteDescription(offer)
+                .then(function(event){
+                    console.log('Offer set.');
+
+                    peer2.createAnswer()
+                        .then(a => peer2.setLocalDescription(a))
+                        .then(function(event){
+                            console.log('Answer created.');
+                            webSocket.send(
+                            JSON.stringify(
+                                {
+                                    'action': 'get-offer',
+                                    'message': peer2.localDescription,
+                                }
+                            )
+            );
+
+                        });
+                });
+
+
+        }
+    
+        var btnSendMsg = document.querySelector('#btn-send-msg');
+        btnSendMsg.onclick = btnSendMsgOnClick;
+
+        var ul = document.querySelector("#message-list");
+
+        function btnSendMsgOnClick(){
+            var messageInput = document.querySelector('#msg');
+            var message = messageInput.value;
+            
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode("Me: " + message));
+            ul.appendChild(li);
+            
+            console.log('Sending: ', message);
+
+            peer2.dc.send(message);
+            
+            messageInput.value = '';
+        }
+
+        function dcOnMessage(event){
+            var message = event.data;
+            
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode("Other: " + message));
+            ul.appendChild(li);
+        }
+
+        // function btnGetOfferOnClick(event){
+        //     webSocket.send(
+        //         JSON.stringify(
+        //             {
+        //                 'action': 'get-offer',
+        //                 'message': null,
+        //             }
+        //         )
+        //     );
+        // }
+    </script>
+{% endblock %}
