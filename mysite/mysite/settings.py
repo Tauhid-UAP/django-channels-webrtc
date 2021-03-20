@@ -29,6 +29,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+NUMB_TURN_CREDENTIAL = config('NUMB_TURN_CREDENTIAL')
+NUMB_TURN_USERNAME = config('NUMB_TURN_USERNAME')
 
 # Application definition
 

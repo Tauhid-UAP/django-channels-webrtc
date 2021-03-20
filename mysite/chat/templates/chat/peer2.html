@@ -3,6 +3,8 @@
 {% block content %}
     <!-- <button id="btn-get-offer">Get Offer SDP</button>
     <button id="btn-send-answer">Send Answer SDP</button> -->
+    <video id="remote-video" autoplay playsinline width="50%"></video>
+    <button id="btn-play-remote-video" style="visibility: hidden">Click to view remote video</button>
 
     <script type="text/javascript">
 
@@ -18,9 +20,10 @@
         var endPoint = wsStart + loc.host + loc.pathname;
 
         var webSocket = new WebSocket(endPoint);
-
+        
         webSocket.onopen = function(e){
             console.log('Connection opened! ', e);
+            
             // webSocket.send(
             //     json_data = JSON.stringify(
             //         {
@@ -44,32 +47,81 @@
         // var btnSendAnswer = document.querySelector('#btn-send-answer');
 
         // btnGetOffer.onclick = btnGetOfferOnClick;
-        
-        const peer2 = new RTCPeerConnection();
 
-        peer2.onicecandidate = e => console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
+        const iceConfiguration = {
+            iceServers: [
+                {
+                    urls: ['turn:numb.viagenie.ca'],
+                    credential: '{{numb_turn_credential}}',
+                    username: '{{numb_turn_username}}'
+                }
+            ]
+        };
+
+        const peer2 = new RTCPeerConnection(null);
+        const remoteStream = new MediaStream();
+        const remoteVideo = document.querySelector('#remote-video');
+        remoteVideo.srcObject = remoteStream;
+
+        window.stream = remoteStream;
+
+        peer2.addEventListener('track', async (event) => {
+            console.log('Adding track: ', event.track);
+            remoteStream.addTrack(event.track, remoteStream);
+        });
+
+        // console.log('remoteStream: ', remoteStream);
+        // console.log('remoteVideo.srcObject: ', remoteVideo.srcObject);
+        // peer2.onicecandidate = e => console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
+
+        // as user gesture
+        // video is played by button press
+        var btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
+        btnPlayRemoteVideo.addEventListener("click", function (){
+            remoteVideo.play();
+            btnPlayRemoteVideo.style.visibility = 'hidden';
+        });
+        
+        peer2.onicecandidate = (event) => {
+            if(event.candidate){
+                console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
+                sendSignal('peer2', 'peer2-candidate', event.candidate);
+            }else{
+                console.log('Gathering finished?');
+            }
+        }
 
         peer2.ondatachannel = e => {
             peer2.dc = e.channel;
             // peer2.dc.onmessage = e => console.log("New message: ", e.data);
             peer2.dc.onmessage = dcOnMessage;
-            peer2.dc.onopen = e => console.log("Connection opened.");
+            peer2.dc.onopen = e => {
+                console.log("Connection opened.");
+                // make play button visible
+                // upon connection
+                btnPlayRemoteVideo.style.visibility = 'visible';
+            }
         }
 
         function webSocketOnMessage(event){
             var parsed_data = JSON.parse(event.data);
 
-            console.log('parsed_data.type: ', parsed_data['message']['type']);
+            var action = parsed_data['action'];
 
-            // return if type == answer
-            // to avoid setting wrong sdp
-            // as answer will be sent by this peer
-            if(parsed_data['message']['type'] == 'answer'){
+            // console.log('parsed_data.type: ', parsed_data['message']['type']);
+
+            if(parsed_data['peer'] == 'peer2'){
+                // ignore all messages from oneself
+                return;
+            }else if(action == 'peer1-candidate'){
+                peer2.addIceCandidate(parsed_data['message']);
                 return;
             }
 
             const offer = parsed_data['message'];
-            console.log('offer: ', offer);
+            // const thisPeer = parsed_data['peer'];
+            // console.log('offer: ', offer);
+            // console.log('thisPeer: ', thisPeer);
             peer2.setRemoteDescription(offer)
                 .then(function(event){
                     console.log('Offer set.');
@@ -78,21 +130,27 @@
                         .then(a => peer2.setLocalDescription(a))
                         .then(function(event){
                             console.log('Answer created.');
-                            webSocket.send(
-                            JSON.stringify(
-                                {
-                                    'action': 'get-offer',
-                                    'message': peer2.localDescription,
-                                }
-                            )
-            );
-
+                            sendSignal('peer2', 'send-answer', peer2.localDescription);
                         });
                 });
 
 
         }
-    
+
+        // send the given action and message strings
+        // over the websocket connection
+        function sendSignal(thisPeer, action, message){
+            webSocket.send(
+                JSON.stringify(
+                    {
+                        'peer': thisPeer,
+                        'action': action,
+                        'message': message,
+                    }
+                )
+            )
+        }
+
         var btnSendMsg = document.querySelector('#btn-send-msg');
         btnSendMsg.onclick = btnSendMsgOnClick;
 

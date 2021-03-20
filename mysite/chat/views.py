@@ -1,9 +1,17 @@
 from django.shortcuts import render
 
+from .utils import get_turn_info
+
 # Create your views here.
 
 def peer1(request):
-    return render(request, 'chat/peer1.html')
+    # get numb turn info
+    context = get_turn_info()
+
+    return render(request, 'chat/peer1.html', context=context)
 
 def peer2(request):
-    return render(request, 'chat/peer2.html')
+    # get numb turn info
+    context = get_turn_info()
+
+    return render(request, 'chat/peer2.html', context=context)
