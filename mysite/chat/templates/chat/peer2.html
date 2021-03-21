@@ -10,12 +10,152 @@
     </div> -->
 
     <script type="text/javascript">
+        var loc = window.location;
+
+        var endPoint = '';
+        var wsStart = 'ws://';
+
+        if(loc.protocol == 'https:'){
+            wsStart = 'wss://';
+        }
+
+        var endPoint = wsStart + loc.host + loc.pathname;
+
+        var webSocket = new WebSocket(endPoint);
+
+        webSocket.onopen = function(e){
+                    console.log('Connection opened! ', e);
+        }
+
+        webSocket.onmessage = webSocketOnMessage;
+
+        webSocket.onclose = function(e){
+            console.log('Connection closed! ', e);
+        }
+
+        webSocket.onerror = function(e){
+            console.log('Error occured! ', e);
+        }
+
+        function webSocketOnMessage(event){
+            var parsed_data = JSON.parse(event.data);
+
+            var action = parsed_data['action'];
+
+            if(parsed_data['peer'] == 'peer2'){
+                // ignore all messages from oneself
+                return;
+            }else if(action == 'peer1-candidate'){
+                peer2.addIceCandidate(parsed_data['message']);
+                return;
+            }
+
+            const offer = parsed_data['message'];
+            // perform all answerer activities
+            createAnswerer();
+            peer2.setRemoteDescription(offer)
+                .then(function(event){
+                    console.log('Offer set.');
+
+                    peer2.createAnswer()
+                        .then(a => peer2.setLocalDescription(a))
+                        .then(function(event){
+                            console.log('Answer created.');
+                            // sendSignal('peer2', 'send-answer', peer2.localDescription);
+                        });
+                });
+
+
+        }
+
+        // send the given action and message strings
+        // over the websocket connection
+        function sendSignal(thisPeer, action, message){
+            webSocket.send(
+                JSON.stringify(
+                    {
+                        'peer': thisPeer,
+                        'action': action,
+                        'message': message,
+                    }
+                )
+            )
+        }
+
+        var btnSendMsg = document.querySelector('#btn-send-msg');
+        btnSendMsg.onclick = btnSendMsgOnClick;
+
+        var ul = document.querySelector("#message-list");
+
+        function btnSendMsgOnClick(){
+            var messageInput = document.querySelector('#msg');
+            var message = messageInput.value;
+            
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode("Me: " + message));
+            ul.appendChild(li);
+            
+            console.log('Sending: ', message);
+
+            peer2.dc.send(message);
+            
+            messageInput.value = '';
+        }
+
+        function dcOnMessage(event){
+            var message = event.data;
+            
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode("Other: " + message));
+            ul.appendChild(li);
+        }
+
 		const constraints = {
 			'video': true,
 			'audio': true
 		}
-		var localStream = new MediaStream();
-		userMedia = navigator.mediaDevices.getUserMedia(constraints)
+
+        const iceConfiguration = {
+            iceServers: [
+                {
+                    urls: ['turn:numb.viagenie.ca'],
+                    credential: '{{numb_turn_credential}}',
+                    username: '{{numb_turn_username}}'
+                }
+            ]
+        };
+
+                
+        // later assign an RTCPeerConnection
+        var peer2;
+        // later assign the datachannel
+        var dc;
+
+        // true if screen is being shared
+        // false otherwise
+        var screenShared = false;
+
+        const localVideo = document.querySelector('#local-video');
+        var remoteVideo;
+
+        // later assign button
+        // to play remote video
+        // in case browser blocks it
+        var btnPlayRemoteVideo;
+
+        // button to start or stop screen sharing
+        var btnShareScreen = document.querySelector('#btn-share-screen');
+
+        // local video stream
+        var localStream = new MediaStream();
+        // remote video stream;
+        var remoteStream;
+
+        // local screen stream
+        // for screen sharing
+        var localDisplayStream = new MediaStream();
+
+        userMedia = navigator.mediaDevices.getUserMedia(constraints)
 			.then(stream => {
 				localStream = stream;
 				console.log('Got MediaStream:', stream);
@@ -31,348 +171,65 @@
 				
 				window.stream = stream; // make variable available to browser console
 			})
-            .then(e => {
-                var loc = window.location;
-
-                var endPoint = '';
-                var wsStart = 'ws://';
-
-                if(loc.protocol == 'https:'){
-                    wsStart = 'wss://';
-                }
-
-                var endPoint = wsStart + loc.host + loc.pathname;
-
-                var webSocket = new WebSocket(endPoint);
-
-                webSocket.onopen = function(e){
-                    console.log('Connection opened! ', e);
-                }
-
-                webSocket.onmessage = webSocketOnMessage;
-
-                webSocket.onclose = function(e){
-                    console.log('Connection closed! ', e);
-                }
-
-                webSocket.onerror = function(e){
-                    console.log('Error occured! ', e);
-                }
-
-                const iceConfiguration = {
-                    iceServers: [
-                        {
-                            urls: ['turn:numb.viagenie.ca'],
-                            credential: '{{numb_turn_credential}}',
-                            username: '{{numb_turn_username}}'
-                        }
-                    ]
-                };
-                const peer2 = new RTCPeerConnection(null);
-                
-                localStream.getTracks().forEach(track => {
-                    peer2.addTrack(track, localStream);
-                });
-
-                const remoteStream = new MediaStream();
-                const remoteVideo = document.querySelector('#remote-video');
-                remoteVideo.srcObject = remoteStream;
-
-                window.stream = remoteStream;
-
-                peer2.addEventListener('track', async (event) => {
-                    console.log('Adding track: ', event.track);
-                    remoteStream.addTrack(event.track, remoteStream);
-                });
-
-                // as user gesture
-                // video is played by button press
-                // otherwise, some browsers might block video
-                var btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
-                btnPlayRemoteVideo.addEventListener("click", function (){
-                    remoteVideo.play();
-                    btnPlayRemoteVideo.style.visibility = 'hidden';
-                });
-
-                peer2.onicecandidate = (event) => {
-                    if(event.candidate){
-                        console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
-                        sendSignal('peer2', 'peer2-candidate', event.candidate);
-                    }else{
-                        console.log('Gathering finished?');
-                    }
-                }
-
-                peer2.ondatachannel = e => {
-                    peer2.dc = e.channel;
-                    peer2.dc.onmessage = dcOnMessage;
-                    peer2.dc.onopen = e => {
-                        console.log("Connection opened.");
-                        
-                        // make play button visible
-                        // upon connection
-                        // to play video in case
-                        // browser blocks it
-                        btnPlayRemoteVideo.style.visibility = 'visible';
-                    }
-                }
-
-                function webSocketOnMessage(event){
-                    var parsed_data = JSON.parse(event.data);
-
-                    var action = parsed_data['action'];
-
-                    if(parsed_data['peer'] == 'peer2'){
-                        // ignore all messages from oneself
-                        return;
-                    }else if(action == 'peer1-candidate'){
-                        peer2.addIceCandidate(parsed_data['message']);
-                        return;
-                    }
-
-                    const offer = parsed_data['message'];
-
-                    peer2.setRemoteDescription(offer)
-                        .then(function(event){
-                            console.log('Offer set.');
-
-                            peer2.createAnswer()
-                                .then(a => peer2.setLocalDescription(a))
-                                .then(function(event){
-                                    console.log('Answer created.');
-                                    sendSignal('peer2', 'send-answer', peer2.localDescription);
-                                });
-                        });
-
-
-                }
-
-                // send the given action and message strings
-                // over the websocket connection
-                function sendSignal(thisPeer, action, message){
-                    webSocket.send(
-                        JSON.stringify(
-                            {
-                                'peer': thisPeer,
-                                'action': action,
-                                'message': message,
-                            }
-                        )
-                    )
-                }
-
-                var btnSendMsg = document.querySelector('#btn-send-msg');
-                btnSendMsg.onclick = btnSendMsgOnClick;
-
-                var ul = document.querySelector("#message-list");
-
-                function btnSendMsgOnClick(){
-                    var messageInput = document.querySelector('#msg');
-                    var message = messageInput.value;
-                    
-                    var li = document.createElement("li");
-                    li.appendChild(document.createTextNode("Me: " + message));
-                    ul.appendChild(li);
-                    
-                    console.log('Sending: ', message);
-
-                    peer2.dc.send(message);
-                    
-                    messageInput.value = '';
-                }
-
-                function dcOnMessage(event){
-                    var message = event.data;
-                    
-                    var li = document.createElement("li");
-                    li.appendChild(document.createTextNode("Other: " + message));
-                    ul.appendChild(li);
-                }
-            })
 			.catch(error => {
 				console.error('Error accessing media devices.', error);
 			});
-
-        // var loc = window.location;
-
-        // var endPoint = '';
-        // var wsStart = 'ws://';
-
-        // if(loc.protocol == 'https:'){
-        //     wsStart = 'wss://';
-        // }
-
-        // var endPoint = wsStart + loc.host + loc.pathname;
-
-        // var webSocket = new WebSocket(endPoint);
         
-        // webSocket.onopen = function(e){
-        //     console.log('Connection opened! ', e);
-            
-        //     // webSocket.send(
-        //     //     json_data = JSON.stringify(
-        //     //         {
-        //     //             'message': 'Hello',
-        //     //         }
-        //     //     )
-        //     // );
-        // }
+        function createAnswerer(){
+            peer2 = new RTCPeerConnection(null);
+                
+            localStream.getTracks().forEach(track => {
+                peer2.addTrack(track, localStream);
+            });
 
-        // webSocket.onmessage = webSocketOnMessage;
+            remoteStream = new MediaStream();
+            remoteVideo = document.querySelector('#remote-video');
+            remoteVideo.srcObject = remoteStream;
 
-        // webSocket.onclose = function(e){
-        //     console.log('Connection closed! ', e);
-        // }
+            window.stream = remoteStream;
 
-        // webSocket.onerror = function(e){
-        //     console.log('Error occured! ', e);
-        // }
+            peer2.addEventListener('track', async (event) => {
+                console.log('Adding track: ', event.track);
+                remoteStream.addTrack(event.track, remoteStream);
+            });
 
-        // // var btnGetOffer = document.querySelector('#btn-get-offer');
-        // // var btnSendAnswer = document.querySelector('#btn-send-answer');
+            // as user gesture
+            // video is played by button press
+            // otherwise, some browsers might block video
+            btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
+            btnPlayRemoteVideo.addEventListener("click", function (){
+                remoteVideo.play();
+                btnPlayRemoteVideo.style.visibility = 'hidden';
+            });
 
-        // // btnGetOffer.onclick = btnGetOfferOnClick;
+            peer2.onicecandidate = (event) => {
+                if(event.candidate){
+                    console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
 
-        // const iceConfiguration = {
-        //     iceServers: [
-        //         {
-        //             urls: ['turn:numb.viagenie.ca'],
-        //             credential: '{{numb_turn_credential}}',
-        //             username: '{{numb_turn_username}}'
-        //         }
-        //     ]
-        // };
+                    // following statement not required anymore
+                    // since answer will be sent after gathering is complete
+                    // sendSignal('peer2', 'peer2-candidate', event.candidate);
+                }else{
+                    console.log('Gathering finished!');
 
-        // const peer2 = new RTCPeerConnection(null);
-        // const remoteStream = new MediaStream();
-        // const remoteVideo = document.querySelector('#remote-video');
-        // remoteVideo.srcObject = remoteStream;
+                    // send answer in multi peer environment
+                    sendSignal('peer2', 'send-answer', peer2.localDescription);
+                }
+            }
 
-        // window.stream = remoteStream;
-
-        // peer2.addEventListener('track', async (event) => {
-        //     console.log('Adding track: ', event.track);
-        //     remoteStream.addTrack(event.track, remoteStream);
-        // });
-
-        // // console.log('remoteStream: ', remoteStream);
-        // // console.log('remoteVideo.srcObject: ', remoteVideo.srcObject);
-        // // peer2.onicecandidate = e => console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
-
-        // // as user gesture
-        // // video is played by button press
-        // var btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
-        // btnPlayRemoteVideo.addEventListener("click", function (){
-        //     remoteVideo.play();
-        //     btnPlayRemoteVideo.style.visibility = 'hidden';
-        // });
-        
-        // peer2.onicecandidate = (event) => {
-        //     if(event.candidate){
-        //         console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer2.localDescription));
-        //         sendSignal('peer2', 'peer2-candidate', event.candidate);
-        //     }else{
-        //         console.log('Gathering finished?');
-        //     }
-        // }
-
-        // peer2.ondatachannel = e => {
-        //     peer2.dc = e.channel;
-        //     // peer2.dc.onmessage = e => console.log("New message: ", e.data);
-        //     peer2.dc.onmessage = dcOnMessage;
-        //     peer2.dc.onopen = e => {
-        //         console.log("Connection opened.");
-        //         // make play button visible
-        //         // upon connection
-        //         btnPlayRemoteVideo.style.visibility = 'visible';
-        //     }
-        // }
-
-        // function webSocketOnMessage(event){
-        //     var parsed_data = JSON.parse(event.data);
-
-        //     var action = parsed_data['action'];
-
-        //     // console.log('parsed_data.type: ', parsed_data['message']['type']);
-
-        //     if(parsed_data['peer'] == 'peer2'){
-        //         // ignore all messages from oneself
-        //         return;
-        //     }else if(action == 'peer1-candidate'){
-        //         peer2.addIceCandidate(parsed_data['message']);
-        //         return;
-        //     }
-
-        //     const offer = parsed_data['message'];
-        //     // const thisPeer = parsed_data['peer'];
-        //     // console.log('offer: ', offer);
-        //     // console.log('thisPeer: ', thisPeer);
-        //     peer2.setRemoteDescription(offer)
-        //         .then(function(event){
-        //             console.log('Offer set.');
-
-        //             peer2.createAnswer()
-        //                 .then(a => peer2.setLocalDescription(a))
-        //                 .then(function(event){
-        //                     console.log('Answer created.');
-        //                     sendSignal('peer2', 'send-answer', peer2.localDescription);
-        //                 });
-        //         });
-
-
-        // }
-
-        // // send the given action and message strings
-        // // over the websocket connection
-        // function sendSignal(thisPeer, action, message){
-        //     webSocket.send(
-        //         JSON.stringify(
-        //             {
-        //                 'peer': thisPeer,
-        //                 'action': action,
-        //                 'message': message,
-        //             }
-        //         )
-        //     )
-        // }
-
-        // var btnSendMsg = document.querySelector('#btn-send-msg');
-        // btnSendMsg.onclick = btnSendMsgOnClick;
-
-        // var ul = document.querySelector("#message-list");
-
-        // function btnSendMsgOnClick(){
-        //     var messageInput = document.querySelector('#msg');
-        //     var message = messageInput.value;
-            
-        //     var li = document.createElement("li");
-        //     li.appendChild(document.createTextNode("Me: " + message));
-        //     ul.appendChild(li);
-            
-        //     console.log('Sending: ', message);
-
-        //     peer2.dc.send(message);
-            
-        //     messageInput.value = '';
-        // }
-
-        // function dcOnMessage(event){
-        //     var message = event.data;
-            
-        //     var li = document.createElement("li");
-        //     li.appendChild(document.createTextNode("Other: " + message));
-        //     ul.appendChild(li);
-        // }
-
-        // // function btnGetOfferOnClick(event){
-        // //     webSocket.send(
-        // //         JSON.stringify(
-        // //             {
-        // //                 'action': 'get-offer',
-        // //                 'message': null,
-        // //             }
-        // //         )
-        // //     );
-        // // }
+            peer2.ondatachannel = e => {
+                peer2.dc = e.channel;
+                peer2.dc.onmessage = dcOnMessage;
+                peer2.dc.onopen = e => {
+                    console.log("Connection opened.");
+                    
+                    // make play button visible
+                    // upon connection
+                    // to play video in case
+                    // browser blocks it
+                    btnPlayRemoteVideo.style.visibility = 'visible';
+                }
+            }
+        }
     </script>
 {% endblock %}
