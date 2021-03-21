@@ -1,8 +1,14 @@
 {% extends 'main.html' %}
 
 {% block content %}
-    <video id="remote-video" autoplay playsinline width="50%"></video>
-    <button id="btn-send-offer">Send Offer SDP</button>
+    <!-- <div>
+        <video id="local-video" style="float: left;" autoplay playsinline width="50%" height="50%"></video>
+        <video id="remote-video" style="float: right;" autoplay playsinline width="50%" height="50%"></video>
+    </div> -->
+    <div>
+        <button id="btn-send-offer">Send Offer SDP</button>
+        <!-- <button id="btn-play-remote-video" style="visibility: hidden">Click to view remote video</button> -->
+    </div>
     <!-- <button id="btn-get-answer">Get Answer SDP</button> -->
 	<script type="text/javascript">
 		const constraints = {
@@ -20,15 +26,11 @@
 					console.log(mediaTracks[i]);
 				}
 				
-				// remoteVideo = document.querySelector("#remote-video");
-				
-				
+                const localVideo = document.querySelector('#local-video');
+                localVideo.srcObject = localStream;
+                localVideo.muted = true;
+
 				window.stream = stream; // make variable available to browser console
-				
-				// remoteVideo.muted = true;
-				
-				// remoteVideo.srcObject = stream;
-				
 			})
             .then(e => {
                 var loc = window.location;
@@ -47,13 +49,6 @@
 
                 webSocket.onopen = function(e){
                     console.log('Connection opened! ', e);
-                    // webSocket.send(
-                    //     JSON.stringify(
-                    //         {
-                    //             'message': 'Hello',
-                    //         }
-                    //     )
-                    // );
                 }
 
                 webSocket.onmessage = webSocketOnMessage;
@@ -67,7 +62,6 @@
                 }
 
                 var btnSendOffer = document.querySelector('#btn-send-offer');
-                // var btnGetAnswer = document.querySelector('#btn-get-answer');
 
                 btnSendOffer.onclick = btnSendOfferOnClick;
 
@@ -75,8 +69,6 @@
                     var parsed_data = JSON.parse(event.data);
                     
                     var action = parsed_data['action'];
-
-                    // console.log('parsed_data.type: ', parsed_data['message']['type']);
 
                     if(parsed_data['peer'] == 'peer1'){
                         // ignore all messages from oneself
@@ -94,7 +86,7 @@
 
                     peer1.setRemoteDescription(answer);
                 }
-
+                
                 const iceConfiguration = {
                     iceServers: [
                         {
@@ -105,21 +97,28 @@
                     ]
                 };
                 const peer1 = new RTCPeerConnection(null);
+                
                 localStream.getTracks().forEach(track => {
                     peer1.addTrack(track, localStream);
                 });
-                const dc = peer1.createDataChannel("channel");
 
-                // dc.onmessage = e => console.log("Just got a message: " + e.data);
+                const dc = peer1.createDataChannel("channel");
                 dc.onmessage = dcOnMessage
-                dc.onopen = e => console.log("Connection opened.");
-                // peer1.onicecandidate = e => console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer1.localDescription));
+                dc.onopen = e => {
+                    console.log("Connection opened.");
+
+                    // make play button visible
+                    // upon connection
+                    // to play video in case
+                    // browser blocks it
+                    btnPlayRemoteVideo.style.visibility = 'visible';
+                }
+                
                 peer1.onicecandidate = (event) => {
                     if(event.candidate){
                         console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer1.localDescription));
-                        // sendSignal('peer1', 'peer1-candidate', event.candidate);
                     }else{
-                        console.log('Gathering finished?');
+                        console.log('Gathering finished!');
                     }
                 }
 
@@ -129,6 +128,15 @@
 
                 peer1.addEventListener('track', async (event) => {
                     remoteStream.addTrack(event.track, remoteStream);
+                });
+
+                // as user gesture
+                // video is played by button press
+                // otherwise, some browsers might block video
+                var btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
+                btnPlayRemoteVideo.addEventListener("click", function (){
+                    remoteVideo.play();
+                    btnPlayRemoteVideo.style.visibility = 'hidden';
                 });
 
                 peer1.createOffer()
@@ -188,7 +196,6 @@
 			.catch(error => {
 				console.error('Error accessing media devices.', error);
 			});
-        console.log('Outside');
 	</script>
     <!-- <script type="text/javascript">
 
