@@ -134,7 +134,7 @@ function webSocketOnMessage(event){
         if(peer.remoteDescription){
             // ignore in case there is a remote SDP
             // for this RTCPeerConnection
-            // as earlier SDP were programmed
+            // as earlier, SDP were programmed
             // to be sent only after gathering is complete
 
             return;
@@ -201,17 +201,6 @@ const iceConfiguration = {
 var screenShared = false;
 
 const localVideo = document.querySelector('#local-video');
-var remoteVideo;
-
-// change the following for more than one user
-// as user gesture
-// video is played by button press
-// otherwise, some browsers might block video
-var btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
-btnPlayRemoteVideo.addEventListener("click", function (){
-    remoteVideo.play();
-    btnPlayRemoteVideo.style.visibility = 'hidden';
-});
 
 // button to start or stop screen sharing
 var btnShareScreen = document.querySelector('#btn-share-screen');
@@ -307,21 +296,11 @@ function createOfferer(peerUsername){
     dc.onmessage = dcOnMessage;
     dc.onopen = () => {
         console.log("Connection opened.");
-
-        // make play button visible
-        // upon connection
-        // to play video in case
-        // browser blocks it
-        btnPlayRemoteVideo.style.visibility = 'visible';
     }
 
-    remoteStream = new MediaStream();
-    remoteVideo = document.querySelector('#remote-video');
-    remoteVideo.srcObject = remoteStream;
+    var remoteVideo = createVideo(peerUsername);
 
-    peer.addEventListener('track', async (event) => {
-        remoteStream.addTrack(event.track, remoteStream);
-    });
+    setOnTrack(peer, remoteVideo);
 
     peer.createOffer()
         .then(o => peer.setLocalDescription(o))
@@ -347,37 +326,15 @@ function createAnswerer(offer, peerUsername){
         peer.addTrack(track, localStream);
     });
 
-    remoteStream = new MediaStream();
-    remoteVideo = document.querySelector('#remote-video');
-    remoteVideo.srcObject = remoteStream;
+    var remoteVideo = createVideo(peerUsername);
 
-    window.stream = remoteStream;
-
-    peer.addEventListener('track', async (event) => {
-        console.log('Adding track: ', event.track);
-        remoteStream.addTrack(event.track, remoteStream);
-    });
-
-    // as user gesture
-    // video is played by button press
-    // otherwise, some browsers might block video
-    btnPlayRemoteVideo = document.querySelector('#btn-play-remote-video');
-    btnPlayRemoteVideo.addEventListener("click", function (){
-        remoteVideo.play();
-        btnPlayRemoteVideo.style.visibility = 'hidden';
-    });
+    setOnTrack(peer, remoteVideo);
 
     peer.ondatachannel = e => {
         peer.dc = e.channel;
         peer.dc.onmessage = dcOnMessage;
         peer.dc.onopen = () => {
             console.log("Connection opened.");
-            
-            // make play button visible
-            // upon connection
-            // to play video in case
-            // browser blocks it
-            btnPlayRemoteVideo.style.visibility = 'visible';
         }
 
         // store the RTCPeerConnection
@@ -423,4 +380,57 @@ function getDataChannels(){
     }
 
     return dataChannels;
+}
+
+// for every new peer
+// create a new video element
+// and its corresponding user gesture button
+// assign ids corresponding to the username of the remote peer
+function createVideo(peerUsername){
+    var videoContainer = document.querySelector('#video-container');
+
+    // create the new video element
+    // and corresponding user gesture button
+    var remoteVideo = document.createElement('video');
+    var btnPlayRemoteVideo = document.createElement('button');
+
+    remoteVideo.id = peerUsername + '-video';
+    btnPlayRemoteVideo.id = peerUsername + '-btn-play-remote-video';
+    btnPlayRemoteVideo.innerHTML = 'If remote video does not play, click here';
+
+    // wrapper for the video and button elements
+    var videoWrapper = document.createElement('div');
+
+    // add the wrapper to the video container
+    videoContainer.appendChild(videoWrapper);
+
+    // add the video and button to the wrapper
+    videoWrapper.appendChild(remoteVideo);
+    videoWrapper.appendChild(btnPlayRemoteVideo);
+
+    // as user gesture
+    // video is played by button press
+    // otherwise, some browsers might block video
+    btnPlayRemoteVideo.addEventListener("click", function (){
+        remoteVideo.play();
+        btnPlayRemoteVideo.style.visibility = 'hidden';
+    });
+
+    return remoteVideo;
+}
+
+// set onTrack for RTCPeerConnection
+// to add remote tracks to remote stream
+// to show video through corresponding remote video element
+function setOnTrack(peer, remoteVideo){
+    // create new MediaStream for remote tracks
+    var remoteStream = new MediaStream();
+
+    // assign remoteStream as the source for remoteVideo
+    remoteVideo.srcObject = remoteStream;
+
+    peer.addEventListener('track', async (event) => {
+        console.log('Adding track: ', event.track);
+        remoteStream.addTrack(event.track, remoteStream);
+    });
 }
