@@ -207,7 +207,7 @@ function createAnswerer(){
     peer2.ondatachannel = e => {
         peer2.dc = e.channel;
         peer2.dc.onmessage = dcOnMessage;
-        peer2.dc.onopen = e => {
+        peer2.dc.onopen = () => {
             console.log("Connection opened.");
             
             // make play button visible

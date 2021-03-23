@@ -31,6 +31,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         print('Message received: ', message)
 
+        # send the channel name
+        # to all peers
+        # so some messages can be sent to this channel specifically
+        receive_dict['receiver_channel_name'] = self.channel_name
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {

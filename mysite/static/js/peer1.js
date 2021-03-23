@@ -20,6 +20,8 @@ webSocket.onmessage = webSocketOnMessage;
 
 webSocket.onclose = function(e){
     console.log('Connection closed! ', e);
+
+    peer1.close();
 }
 
 webSocket.onerror = function(e){
@@ -217,7 +219,7 @@ function createOfferer(){
 
     dc = peer1.createDataChannel("channel");
     dc.onmessage = dcOnMessage
-    dc.onopen = e => {
+    dc.onopen = () => {
         console.log("Connection opened.");
 
         // make play button visible
@@ -226,7 +228,7 @@ function createOfferer(){
         // browser blocks it
         btnPlayRemoteVideo.style.visibility = 'visible';
     }
-    
+
     peer1.onicecandidate = (event) => {
         if(event.candidate){
             console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer1.localDescription));

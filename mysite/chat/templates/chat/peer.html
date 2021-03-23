@@ -1,10 +1,7 @@
 {% extends 'main.html' %}
 
-{% block content %}
-    <!-- <button id="btn-get-answer">Get Answer SDP</button> -->
+{% load static %}
 
-    <script type="text/javascript">
-        var usernameInput = document.querySelector('#username');
-        var username = null;
-    </script>
+{% block content %}
+    <script type="text/javascript" src="{% static 'js/peer.js' %}"></script>
 {% endblock %}
