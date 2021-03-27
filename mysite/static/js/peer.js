@@ -25,6 +25,12 @@ var btnJoin = document.querySelector('#btn-join');
 // upon button click
 btnJoin.onclick = () => {
     username = usernameInput.value;
+
+    if(username == ''){
+        // ignore if username is empty
+        return;
+    }
+
     usernameInput.value = '';
     usernameInput.style.visibility = 'hidden';
     btnJoin.style.visibility = 'hidden';
@@ -37,7 +43,9 @@ btnJoin.onclick = () => {
         console.log('Connection opened! ', e);
 
         // notify other peers
-        sendSignal('new-peer', username);
+        sendSignal('new-peer', {
+            'username': username,
+        });
     }
     
     webSocket.onmessage = webSocketOnMessage;
@@ -70,24 +78,27 @@ function webSocketOnMessage(event){
         // in case of new peer
         // which was not previously added
         if(action == 'new-peer'){
+            console.log('New peer: ', peerUsername);
+            console.log('channel_name: ', parsedData['message']['receiver_channel_name']);
+
             // create new RTCPeerConnection
             var peer = createOfferer(peerUsername);
             peer.onicecandidate = (event) => {
                 if(event.candidate){
                     console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
-
                     return;
                 }
                 
                 // event.candidate == null indicates that gathering is complete
                 
-                console.log('Gathering finished! Sending offer SDP.');
+                console.log('Gathering finished! Sending offer SDP to ', peerUsername, '.');
+                console.log('receiverChannelName: ', parsedData['message']['receiver_channel_name']);
     
                 // send offer to new peer
                 // after ice candidate gathering is complete
                 sendSignal('new-offer', {
                     'sdp': peer.localDescription,
-                    'receiver_channel_name': parsedData['sender'],
+                    'receiver_channel_name': parsedData['message']['receiver_channel_name'],
                 });
             }
             
@@ -95,7 +106,8 @@ function webSocketOnMessage(event){
         }
 
         if(action == 'new-offer'){
-            console.log('Got new offer.');
+            console.log('Got new offer from ', peerUsername);
+            console.log('channel_name: ', parsedData['message']['receiver_channel_name']);
 
             // create new RTCPeerConnection
             // set offer as remote description
@@ -106,19 +118,19 @@ function webSocketOnMessage(event){
             peer.onicecandidate = (event) => {
                 if(event.candidate){
                     console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
-
                     return;
                 }
                 
                 // event.candidate == null indicates that gathering is complete
 
-                console.log('Gathering finished! Sending answer SDP.');
+                console.log('Gathering finished! Sending answer SDP to ', peerUsername, '.');
+                console.log('receiverChannelName: ', parsedData['message']['receiver_channel_name']);
         
                 // send answer to offering peer
                 // after ice candidate gathering is complete
                 sendSignal('new-answer', {
                     'sdp': peer.localDescription,
-                    'receiver_channel_name': parsedData['sender'],
+                    'receiver_channel_name': parsedData['message']['receiver_channel_name'],
                 });
             }
 
@@ -158,11 +170,21 @@ function webSocketOnMessage(event){
     }
 }
 
+var messageInput = document.querySelector('#msg');
+messageInput.addEventListener('keyup', function(event){
+    if(event.keyCode == 13){
+        // prevent from putting 'Enter' as input
+        event.preventDefault();
+
+        // click send message button
+        btnSendMsg.click();
+    }
+});
+
 var btnSendMsg = document.querySelector('#btn-send-msg');
 btnSendMsg.onclick = btnSendMsgOnClick;
 
 function btnSendMsgOnClick(){
-    var messageInput = document.querySelector('#msg');
     var message = messageInput.value;
     
     var li = document.createElement("li");
@@ -320,7 +342,7 @@ function createOfferer(peerUsername){
 // create RTCPeerConnection as answerer
 // and store it and its datachannel
 function createAnswerer(offer, peerUsername){
-    peer = new RTCPeerConnection(null);
+    var peer = new RTCPeerConnection(null);
         
     localStream.getTracks().forEach(track => {
         peer.addTrack(track, localStream);
@@ -347,13 +369,22 @@ function createAnswerer(offer, peerUsername){
 
     peer.setRemoteDescription(offer)
         .then(() => {
-            console.log('Offer set.');
+            console.log('Set offer from %s.', peerUsername);
 
-            peer.createAnswer()
-                .then(a => peer.setLocalDescription(a))
-                .then(() => {
-                    console.log('Answer created.');
-                });
+            return peer.createAnswer()
+        })
+        .then(a => {
+            console.log('Setting local answer for %s.', peerUsername);
+            return peer.setLocalDescription(a);
+        })
+        .then(() => {
+            console.log('Answer created for %s.', peerUsername);
+            console.log('localDescription: ', peer.localDescription);
+            console.log('remoteDescription: ', peer.remoteDescription);
+        })
+        .catch(error => {
+            console.log('Error creating answer for %s.', peerUsername);
+            console.log(error);
         });
 
     return peer
@@ -396,7 +427,7 @@ function createVideo(peerUsername){
 
     remoteVideo.id = peerUsername + '-video';
     btnPlayRemoteVideo.id = peerUsername + '-btn-play-remote-video';
-    btnPlayRemoteVideo.innerHTML = 'If remote video does not play, click here';
+    btnPlayRemoteVideo.innerHTML = 'Click here if remote video does not play';
 
     // wrapper for the video and button elements
     var videoWrapper = document.createElement('div');
