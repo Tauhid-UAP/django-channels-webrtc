@@ -4,12 +4,6 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 import asyncio
 
 class ChatConsumer(AsyncWebsocketConsumer):
-    # store unanswered offers
-    # and corresponding channel names
-    # to resend
-    # storing format: {'receiver_channel_name': receive_dict}
-    # unanswered_offers = {}
-
     async def connect(self):
 
         self.room_group_name = 'Test-Room'
@@ -45,10 +39,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         print('peer_username: ', peer_username)
         print('action: ', action)
         print('self.channel_name: ', self.channel_name)
-
-        if action == 'answer-received':
-            self.unanswered_offer.pop(message['receiver_channel_name'])
-            return
 
         if(action == 'new-offer') or (action =='new-answer'):
             # in case its a new offer or answer
