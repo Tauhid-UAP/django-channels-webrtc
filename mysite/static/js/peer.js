@@ -71,7 +71,7 @@ btnJoin.onclick = () => {
 
         // notify other peers
         sendSignal('new-peer', {
-            'screen_sharing': false,
+            'local_screen_sharing': false,
         });
     }
     
@@ -102,9 +102,9 @@ function webSocketOnMessage(event){
     }
 
     // boolean value specified by other peer
-    // indicates whether this RTCPeerConnection is for screen sharing
-    var screenSharing = parsedData['message']['screen_sharing'];
-    console.log('screenSharing: ', screenSharing);
+    // indicates whether the other peer is sharing screen
+    var remoteScreenSharing = parsedData['message']['local_screen_sharing'];
+    console.log('remoteScreenSharing: ', remoteScreenSharing);
     
     // channel name of the sender of this message
     // used to send messages back to that sender
@@ -117,29 +117,22 @@ function webSocketOnMessage(event){
         console.log('New peer: ', peerUsername);
 
         // create new RTCPeerConnection
-        var peer = createOfferer(peerUsername, screenSharing);
-        peer.onicecandidate = (event) => {
-            if(event.candidate){
-                console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
-                return;
-            }
-            
-            // event.candidate == null indicates that gathering is complete
-            
-            console.log('Gathering finished! Sending offer SDP to ', peerUsername, '.');
-            console.log('receiverChannelName: ', parsedData['message']['receiver_channel_name']);
+        createOfferer(peerUsername, false, remoteScreenSharing, receiver_channel_name);
 
-            // send offer to new peer
-            // after ice candidate gathering is complete
-            sendSignal('new-offer', {
-                'sdp': peer.localDescription,
-                'receiver_channel_name': receiver_channel_name,
-                'screen_sharing': screenSharing,
-            });
+        if(screenShared && !remoteScreenSharing){
+            // if local screen is being shared
+            // and remote peer is not sharing screen
+            // send offer from screen sharing peer
+            console.log('Creating screen sharing offer.');
+            createOfferer(peerUsername, true, remoteScreenSharing, receiver_channel_name);
         }
         
         return;
     }
+
+    // remote_screen_sharing from the remote peer
+    // will be local screen sharing info for this peer
+    var localScreenSharing = parsedData['message']['remote_screen_sharing'];
 
     if(action == 'new-offer'){
         console.log('Got new offer from ', peerUsername);
@@ -148,27 +141,7 @@ function webSocketOnMessage(event){
         // set offer as remote description
         var offer = parsedData['message']['sdp'];
         console.log('Offer: ', offer);
-        var peer = createAnswerer(offer, peerUsername, screenSharing);
-
-        peer.onicecandidate = (event) => {
-            if(event.candidate){
-                console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
-                return;
-            }
-            
-            // event.candidate == null indicates that gathering is complete
-
-            console.log('Gathering finished! Sending answer SDP to ', peerUsername, '.');
-            console.log('receiverChannelName: ', parsedData['message']['receiver_channel_name']);
-    
-            // send answer to offering peer
-            // after ice candidate gathering is complete
-            sendSignal('new-answer', {
-                'sdp': peer.localDescription,
-                'receiver_channel_name': receiver_channel_name,
-                'screen_sharing': screenSharing,
-            });
-        }
+        var peer = createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSharing, receiver_channel_name);
 
         return;
     }
@@ -179,19 +152,15 @@ function webSocketOnMessage(event){
         // get the corresponding RTCPeerConnection
         var peer = null;
         
-        if(screenSharing){
+        if(remoteScreenSharing){
+            // if answerer is screen sharer
             peer = mapPeers[peerUsername + ' Screen'][0];
+        }else if(localScreenSharing){
+            // if offerer was screen sharer
+            peer = mapScreenPeers[peerUsername][0];
         }else{
+            // if both are non-screen sharers
             peer = mapPeers[peerUsername][0];
-        }
-
-        if(peer.remoteDescription){
-            // ignore in case there is a remote SDP
-            // for this RTCPeerConnection
-            // as earlier, SDP were programmed
-            // to be sent only after gathering is complete
-
-            return;
         }
 
         // get the answer
@@ -341,7 +310,7 @@ userMedia = navigator.mediaDevices.getUserMedia(constraints)
                     // notify other peers
                     // of screen sharing peer
                     sendSignal('new-peer', {
-                        'screen_sharing': true,
+                        'local_screen_sharing': true,
                     });
                 });
 
@@ -368,13 +337,12 @@ function sendSignal(action, message){
 
 // create RTCPeerConnection as offerer
 // and store it and its datachannel
-function createOfferer(peerUsername, screenSharing){
+// send sdp to remote peer after gathering is complete
+function createOfferer(peerUsername, localScreenSharing, remoteScreenSharing, receiver_channel_name){
     var peer = new RTCPeerConnection(null);
     
     // add local user media stream tracks
-    // screenSharing will always be false for offerer
-    // as screen sharer will always appear as a new peer
-    addLocalTracks(peer, false);
+    addLocalTracks(peer, localScreenSharing);
 
     // create and manage an RTCDataChannel
     var dc = peer.createDataChannel("channel");
@@ -382,30 +350,61 @@ function createOfferer(peerUsername, screenSharing){
         console.log("Connection opened.");
     };
     var remoteVideo = null;
-    if(!screenSharing){
-        // only if offer is not for screen sharing peer
+    if(!localScreenSharing && !remoteScreenSharing){
+        // none of the peers are sharing screen (normal operation)
     
         dc.onmessage = dcOnMessage;
 
         remoteVideo = createVideo(peerUsername);
+        setOnTrack(peer, remoteVideo);
+        console.log('Remote video source: ', remoteVideo.srcObject);
 
         // store the RTCPeerConnection
         // and the corresponding RTCDataChannel
         mapPeers[peerUsername] = [peer, dc];
-    }else{
+    }else if(!localScreenSharing && remoteScreenSharing){
+        // answerer is screen sharing
+
         dc.onmessage = (e) => {
             console.log('New message from %s\'s screen: ', peerUsername, e.data);
         };
 
         remoteVideo = createVideo(peerUsername + '-screen');
-        
+        setOnTrack(peer, remoteVideo);
+        console.log('Remote video source: ', remoteVideo.srcObject);
+
         // if offer is not for screen sharing peer
         mapPeers[peerUsername + ' Screen'] = [peer, dc];
+    }else{
+        // offerer itself is sharing screen
+
+        dc.onmessage = (e) => {
+            console.log('New message from %s: ', peerUsername, e.data);
+        };
+
+        mapScreenPeers[peerUsername] = [peer, dc];
     }
 
-    setOnTrack(peer, remoteVideo);
+    peer.onicecandidate = (event) => {
+        if(event.candidate){
+            console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
+            return;
+        }
+        
+        // event.candidate == null indicates that gathering is complete
+        
+        console.log('Gathering finished! Sending offer SDP to ', peerUsername, '.');
+        console.log('receiverChannelName: ', receiver_channel_name);
 
-    console.log('Remote video source: ', remoteVideo.srcObject);
+        // send offer to new peer
+        // after ice candidate gathering is complete
+        sendSignal('new-offer', {
+            'sdp': peer.localDescription,
+            'receiver_channel_name': receiver_channel_name,
+            'local_screen_sharing': localScreenSharing,
+            'remote_screen_sharing': remoteScreenSharing,
+        });
+    }
 
     peer.createOffer()
         .then(o => peer.setLocalDescription(o))
@@ -420,13 +419,14 @@ function createOfferer(peerUsername, screenSharing){
 
 // create RTCPeerConnection as answerer
 // and store it and its datachannel
-function createAnswerer(offer, peerUsername, screenSharing){
+// send sdp to remote peer after gathering is complete
+function createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSharing, receiver_channel_name){
     var peer = new RTCPeerConnection(null);
 
-    addLocalTracks(peer, screenSharing);
+    addLocalTracks(peer, localScreenSharing);
 
-    if(!screenSharing){
-        // in case it is not a screen sharing peer
+    if(!localScreenSharing && !remoteScreenSharing){
+        // if none are sharing screens (normal operation)
 
         // set remote video
         var remoteVideo = createVideo(peerUsername);
@@ -444,25 +444,82 @@ function createAnswerer(offer, peerUsername, screenSharing){
 
             // store the RTCPeerConnection
             // and the corresponding RTCDataChannel
-            // store it after the RTCDataChannel is ready
+            // after the RTCDataChannel is ready
             // otherwise, peer.dc may be undefined
             // as peer.ondatachannel would not be called yet
             mapPeers[peerUsername] = [peer, peer.dc];
         }
-    }else{
+    }else if(localScreenSharing && !remoteScreenSharing){
+        // answerer itself is sharing screen
+
         // it will have an RTCDataChannel
         peer.ondatachannel = e => {
             peer.dc = e.channel;
             peer.dc.onmessage = (evt) => {
-                console.log('New message: ', evt.data);
+                console.log('New message from %s: ', peerUsername, evt.data);
             }
             peer.dc.onopen = () => {
                 console.log("Connection opened.");
             }
+
+            // this peer is a screen sharer
+            // so its connections will be stored in mapScreenPeers
+            // store the RTCPeerConnection
+            // and the corresponding RTCDataChannel
+            // after the RTCDataChannel is ready
+            // otherwise, peer.dc may be undefined
+            // as peer.ondatachannel would not be called yet
+            mapScreenPeers[peerUsername] = [peer, peer.dc];
+        }
+    }else{
+        // offerer is sharing screen
+
+        // set remote video
+        var remoteVideo = createVideo(peerUsername + '-screen');
+        // and add tracks to remote video
+        setOnTrack(peer, remoteVideo);
+
+        // it will have an RTCDataChannel
+        peer.ondatachannel = e => {
+            peer.dc = e.channel;
+            peer.dc.onmessage = evt => {
+                console.log('New message from %s\'s screen: ', peerUsername, evt.data);
+            }
+            peer.dc.onopen = () => {
+                console.log("Connection opened.");
+            }
+
+            // store the RTCPeerConnection
+            // and the corresponding RTCDataChannel
+            // after the RTCDataChannel is ready
+            // otherwise, peer.dc may be undefined
+            // as peer.ondatachannel would not be called yet
+            mapPeers[peerUsername + ' Screen'] = [peer, peer.dc];
+        }
+    }
+
+    peer.onicecandidate = (event) => {
+        if(event.candidate){
+            console.log("New Ice Candidate! Reprinting SDP" + JSON.stringify(peer.localDescription));
+            return;
         }
         
-            // in case it is a screen sharing peer
-        mapScreenPeers[peerUsername] = peer;
+        // event.candidate == null indicates that gathering is complete
+
+        console.log('Gathering finished! Sending answer SDP to ', peerUsername, '.');
+        console.log('receiverChannelName: ', receiver_channel_name);
+
+        // send answer to offering peer
+        // after ice candidate gathering is complete
+        // answer needs to send two types of screen sharing data
+        // local and remote so that offerer can understand
+        // to which RTCPeerConnection this answer belongs
+        sendSignal('new-answer', {
+            'sdp': peer.localDescription,
+            'receiver_channel_name': receiver_channel_name,
+            'local_screen_sharing': localScreenSharing,
+            'remote_screen_sharing': remoteScreenSharing,
+        });
     }
 
     peer.setRemoteDescription(offer)
@@ -570,8 +627,8 @@ function setOnTrack(peer, remoteVideo){
 
 // called to add appropriate tracks
 // to peer
-function addLocalTracks(peer, screenSharing){
-    if(!screenSharing){
+function addLocalTracks(peer, localScreenSharing){
+    if(!localScreenSharing){
         // if it is not a screen sharing peer
         // add user media tracks
         localStream.getTracks().forEach(track => {
