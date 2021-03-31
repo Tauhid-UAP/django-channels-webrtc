@@ -287,6 +287,14 @@ userMedia = navigator.mediaDevices.getUserMedia(constraints)
                 // remove it
                 removeVideo(localScreen);
 
+                // close all screen share peer connections
+                var screenPeers = getPeers(mapScreenPeers);
+                for(index in screenPeers){
+                    screenPeers[index].close();
+                }
+                // empty the screen sharing peer storage object
+                mapScreenPeers = {};
+
                 return;
             }
             
@@ -362,6 +370,18 @@ function createOfferer(peerUsername, localScreenSharing, remoteScreenSharing, re
         // store the RTCPeerConnection
         // and the corresponding RTCDataChannel
         mapPeers[peerUsername] = [peer, dc];
+
+        peer.oniceconnectionstatechange = () => {
+            var iceConnectionState = peer.iceConnectionState;
+            if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                console.log('Deleting peer');
+                delete mapPeers[peerUsername];
+                if(iceConnectionState != 'closed'){
+                    peer.close();
+                }
+                removeVideo(remoteVideo);
+            }
+        };
     }else if(!localScreenSharing && remoteScreenSharing){
         // answerer is screen sharing
 
@@ -375,6 +395,17 @@ function createOfferer(peerUsername, localScreenSharing, remoteScreenSharing, re
 
         // if offer is not for screen sharing peer
         mapPeers[peerUsername + ' Screen'] = [peer, dc];
+
+        peer.oniceconnectionstatechange = () => {
+            var iceConnectionState = peer.iceConnectionState;
+            if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                delete mapPeers[peerUsername + ' Screen'];
+                if(iceConnectionState != 'closed'){
+                    peer.close();
+                }
+                removeVideo(remoteVideo);
+            }
+        };
     }else{
         // offerer itself is sharing screen
 
@@ -383,6 +414,16 @@ function createOfferer(peerUsername, localScreenSharing, remoteScreenSharing, re
         };
 
         mapScreenPeers[peerUsername] = [peer, dc];
+
+        peer.oniceconnectionstatechange = () => {
+            var iceConnectionState = peer.iceConnectionState;
+            if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                delete mapScreenPeers[peerUsername];
+                if(iceConnectionState != 'closed'){
+                    peer.close();
+                }
+            }
+        };
     }
 
     peer.onicecandidate = (event) => {
@@ -449,6 +490,17 @@ function createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSha
             // as peer.ondatachannel would not be called yet
             mapPeers[peerUsername] = [peer, peer.dc];
         }
+
+        peer.oniceconnectionstatechange = () => {
+            var iceConnectionState = peer.iceConnectionState;
+            if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                delete mapPeers[peerUsername];
+                if(iceConnectionState != 'closed'){
+                    peer.close();
+                }
+                removeVideo(remoteVideo);
+            }
+        };
     }else if(localScreenSharing && !remoteScreenSharing){
         // answerer itself is sharing screen
 
@@ -470,6 +522,16 @@ function createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSha
             // otherwise, peer.dc may be undefined
             // as peer.ondatachannel would not be called yet
             mapScreenPeers[peerUsername] = [peer, peer.dc];
+
+            peer.oniceconnectionstatechange = () => {
+                var iceConnectionState = peer.iceConnectionState;
+                if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                    delete mapScreenPeers[peerUsername];
+                    if(iceConnectionState != 'closed'){
+                        peer.close();
+                    }
+                }
+            };
         }
     }else{
         // offerer is sharing screen
@@ -495,7 +557,18 @@ function createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSha
             // otherwise, peer.dc may be undefined
             // as peer.ondatachannel would not be called yet
             mapPeers[peerUsername + ' Screen'] = [peer, peer.dc];
+            
         }
+        peer.oniceconnectionstatechange = () => {
+            var iceConnectionState = peer.iceConnectionState;
+            if (iceConnectionState === "failed" || iceConnectionState === "disconnected" || iceConnectionState === "closed"){
+                delete mapPeers[peerUsername + ' Screen'];
+                if(iceConnectionState != 'closed'){
+                    peer.close();
+                }
+                removeVideo(remoteVideo);
+            }
+        };
     }
 
     peer.onicecandidate = (event) => {
@@ -565,6 +638,21 @@ function getDataChannels(){
     }
 
     return dataChannels;
+}
+
+// get all stored RTCPeerConnections
+// peerStorageObj is an object (either mapPeers or mapScreenPeers)
+function getPeers(peerStorageObj){
+    var peers = [];
+    
+    for(peerUsername in peerStorageObj){
+        var peer = peerStorageObj[peerUsername][0];
+        console.log('peer: ', peer);
+
+        peers.push(peer);
+    }
+
+    return peers;
 }
 
 // for every new peer
