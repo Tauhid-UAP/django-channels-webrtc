@@ -28,6 +28,22 @@
 			</div>
 			<div id="ct"><input id="msg"><button id="btn-send-msg">send</button></div>
 			<button id="btn-share-screen">Share Screen</button>
+			
+			<button id="btn-record-screen">Record Screen</button>
+			
+			<button class="view-button" id="share-file-button">Share File</button>
+			<div id="select-file-dialog" style="display: none;">
+				<div id="dialog-content">
+				  <div id="select-file">
+					<div id="label">Select a file:</div>
+					<input type="file" id="select-file-input">
+				  </div>
+				  <div id="dialog-footer">
+					<button id="ok-button" disabled>Ok</button>
+					<button id="cancel-button" class="cancel-button">Cancel</button>
+				  </div>
+				</div>
+			  </div>
 		</div>
 	</div>
     {% block content %}

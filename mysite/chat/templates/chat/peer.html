@@ -3,5 +3,10 @@
 {% load static %}
 
 {% block content %}
+    <!-- <script>
+        var numbTurnCredential = '{{numb_turn_credential}}';
+        var numbTurnUsername = '{{numb_turn_username}}';
+    </script> -->
+    <script src="https://www.WebRTC-Experiment.com/RecordRTC.js"></script>
     <script type="text/javascript" src="{% static 'js/peer.js' %}"></script>
 {% endblock %}

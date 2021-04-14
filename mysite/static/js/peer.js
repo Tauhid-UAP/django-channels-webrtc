@@ -26,6 +26,33 @@ var localDisplayStream = new MediaStream();
 btnToggleAudio = document.querySelector("#btn-toggle-audio");
 btnToggleVideo = document.querySelector("#btn-toggle-video");
 
+var messageInput = document.querySelector('#msg');
+var btnSendMsg = document.querySelector('#btn-send-msg');
+
+// button to start or stop screen recording
+var btnRecordScreen = document.querySelector('#btn-record-screen');
+// object that will start or stop screen recording
+var recorder;
+// true of currently recording, false otherwise
+var recording = false;
+
+var file;
+
+document.getElementById('share-file-button').addEventListener('click', () => {
+    document.getElementById('select-file-dialog').style.display = 'block';
+});
+  
+document.getElementById('cancel-button').addEventListener('click', () => {
+    document.getElementById('select-file-input').value = '';
+    document.getElementById('select-file-dialog').style.display = 'none';
+    document.getElementById('ok-button').disabled = true;
+});
+  
+document.getElementById('select-file-input').addEventListener('change', (event) => {
+    file = event.target.files[0];
+    document.getElementById('ok-button').disabled = !file;
+});
+
 // ul of messages
 var ul = document.querySelector("#message-list");
 
@@ -58,8 +85,13 @@ btnJoin.onclick = () => {
         return;
     }
 
+    // clear input
     usernameInput.value = '';
+    // disable and vanish input
+    btnJoin.disabled = true;
     usernameInput.style.visibility = 'hidden';
+    // disable and vanish join button
+    btnJoin.disabled = true;
     btnJoin.style.visibility = 'hidden';
 
     document.querySelector('#label-username').innerHTML = username;
@@ -84,6 +116,9 @@ btnJoin.onclick = () => {
     webSocket.onerror = function(e){
         console.log('Error occured! ', e);
     }
+
+    btnSendMsg.disabled = false;
+    messageInput.disabled = false;
 }
 
 function webSocketOnMessage(event){
@@ -181,7 +216,6 @@ function webSocketOnMessage(event){
     }
 }
 
-var messageInput = document.querySelector('#msg');
 messageInput.addEventListener('keyup', function(event){
     if(event.keyCode == 13){
         // prevent from putting 'Enter' as input
@@ -192,7 +226,6 @@ messageInput.addEventListener('keyup', function(event){
     }
 });
 
-var btnSendMsg = document.querySelector('#btn-send-msg');
 btnSendMsg.onclick = btnSendMsgOnClick;
 
 function btnSendMsgOnClick(){
@@ -219,15 +252,15 @@ const constraints = {
     'audio': true
 }
 
-const iceConfiguration = {
-    iceServers: [
-        {
-            urls: ['turn:numb.viagenie.ca'],
-            credential: '{{numb_turn_credential}}',
-            username: '{{numb_turn_username}}'
-        }
-    ]
-};
+// const iceConfiguration = {
+//     iceServers: [
+//         {
+//             urls: ['turn:numb.viagenie.ca'],
+//             credential: numbTurnCredential,
+//             username: numbTurnUsername
+//         }
+//     ]
+// };
 
 userMedia = navigator.mediaDevices.getUserMedia(constraints)
     .then(stream => {
@@ -320,10 +353,53 @@ userMedia = navigator.mediaDevices.getUserMedia(constraints)
                     sendSignal('new-peer', {
                         'local_screen_sharing': true,
                     });
+                })
+                .catch(error => {
+                    console.log('Error accessing display media.', error);
                 });
 
             btnShareScreen.innerHTML = 'Stop sharing';
         }
+    })
+    .then(e => {
+        btnRecordScreen.addEventListener('click', () => {
+            if(recording){
+                // toggle recording
+                recording = !recording;
+
+                btnRecordScreen.innerHTML = 'Record Screen';
+
+                recorder.stopRecording(function() {
+                    var blob = recorder.getBlob();
+                    invokeSaveAsDialog(blob);
+                });
+
+                return;
+            }
+            
+            // toggle recording
+            recording = !recording;
+
+            navigator.mediaDevices.getDisplayMedia(constraints)
+                .then(stream => {
+                    recorder = RecordRTC(stream, {
+                        type: 'video',
+                        MimeType: 'video/mp4'
+                    });
+                    recorder.startRecording();
+                    
+                    var mediaTracks = stream.getTracks();
+                    for(i=0; i < mediaTracks.length; i++){
+                        console.log(mediaTracks[i]);
+                    }
+
+                })
+                .catch(error => {
+                    console.log('Error accessing display media.', error);
+                });
+
+            btnRecordScreen.innerHTML = 'Stop Recording';
+        });
     })
     .catch(error => {
         console.error('Error accessing media devices.', error);
@@ -477,6 +553,7 @@ function createAnswerer(offer, peerUsername, localScreenSharing, remoteScreenSha
 
         // it will have an RTCDataChannel
         peer.ondatachannel = e => {
+            console.log('e.channel.label: ', e.channel.label);
             peer.dc = e.channel;
             peer.dc.onmessage = dcOnMessage;
             peer.dc.onopen = () => {
@@ -661,7 +738,7 @@ function getPeers(peerStorageObj){
 // assign ids corresponding to the username of the remote peer
 function createVideo(peerUsername){
     var videoContainer = document.querySelector('#video-container');
-
+    
     // create the new video element
     // and corresponding user gesture button
     var remoteVideo = document.createElement('video');
@@ -679,7 +756,7 @@ function createVideo(peerUsername){
     // add the wrapper to the video container
     videoContainer.appendChild(videoWrapper);
 
-    // add the video and button to the wrapper
+    // add the video to the wrapper
     videoWrapper.appendChild(remoteVideo);
     // videoWrapper.appendChild(btnPlayRemoteVideo);
 

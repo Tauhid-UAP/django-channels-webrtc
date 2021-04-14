@@ -19,5 +19,6 @@ def peer2(request):
 def peer(request):
     # get numb turn info
     context = get_turn_info()
+    print('context: ', context)
 
     return render(request, 'chat/peer.html', context=context)
