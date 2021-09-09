@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+
+{% load static %}
+
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Django Channels WebRTC</title>
+	<link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
+</head>
+<body>
+	<h3 id="label-username">USERNAME</h3>
+	<div>
+		<input id="username"><button id="btn-join">Join Room</button>
+	</div>
+	<div class="main-grid-container">
+		<!-- for grid layout
+		assign class video-grad-layout -->
+		<div>
+			<div><video id="local-video" style="float: left;" autoplay playsinline></video></div>
+			<div>
+				<video id="remote-video" style="float: right;" autoplay playsinline></video>
+				<button id="btn-play-remote-video" style="visibility: hidden">Click to view remote video</button>
+			</div>
+		</div>
+		<div id="chat">
+			<h3> CHAT </h3>
+			<div id="messages">
+				<ul id="message-list"></ul>
+			</div>
+			<div id="ct"><input id="msg"><button id="btn-send-msg">send</button></div>
+			<button id="btn-share-screen">Share Screen</button>
+		</div>
+	</div>
+    {% block content %}
+    {% endblock %}
+</body>
+</html>

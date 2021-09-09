@@ -1,0 +1,26 @@
+version: "3"
+
+services:
+  redis:
+    restart: always
+    image: redis:latest
+    networks:
+      - main
+    ports:
+      - "6379:6379/tcp"
+  web:
+    restart: always
+    build: ./web
+    image: django_video
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    networks:
+      - main
+    volumes:
+      - ./mysite:/usr/src/app/Django_Video
+    env_file: .env
+    environment:
+      - DEBUG=true
+networks:
+  main:
