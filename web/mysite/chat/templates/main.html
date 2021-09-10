@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+
+{% load static %}
+
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Django Channels WebRTC</title>
+	<link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
+</head>
+<body>
+	<h3 id="label-username">USERNAME</h3>
+	<div>
+		<input id="username"><button id="btn-join">Join Room</button>
+	</div>
+	<div class="main-grid-container">
+		<!-- for grid layout
+		assign class video-grad-layout -->
+		<div id="video-container">
+			<div><video id="local-video" style="float: left;" autoplay playsinline></video></div>
+			<button id="btn-toggle-audio" class="btn btn-dark">Audio Mute</button>
+			<button id="btn-toggle-video" class="btn btn-dark">Video Off</button>
+		</div>
+		<div id="chat">
+			<h3> CHAT </h3>
+			<div id="messages">
+				<ul id="message-list"></ul>
+			</div>
+			<div id="ct"><input id="msg"><button id="btn-send-msg">send</button></div>
+			<button id="btn-share-screen">Share Screen</button>
+			
+			<button id="btn-record-screen">Record Screen</button>
+			
+			<button class="view-button" id="share-file-button">Share File</button>
+			<div id="select-file-dialog" style="display: none;">
+				<div id="dialog-content">
+				  <div id="select-file">
+					<div id="label">Select a file:</div>
+					<input type="file" id="select-file-input">
+				  </div>
+				  <div id="dialog-footer">
+					<button id="ok-button" disabled>Ok</button>
+					<button id="cancel-button" class="cancel-button">Cancel</button>
+				  </div>
+				</div>
+			  </div>
+		</div>
+	</div>
+    {% block content %}
+    {% endblock %}
+</body>
+</html>
