@@ -29,7 +29,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['.*']
+ALLOWED_HOSTS = ['*']
 
 NUMB_TURN_CREDENTIAL = config('NUMB_TURN_CREDENTIAL', default=None)
 NUMB_TURN_USERNAME = config('NUMB_TURN_USERNAME', default=None)

@@ -18,7 +18,7 @@ services:
     networks:
       - main
     volumes:
-      - ./mysite:/usr/src/app/Django_Video
+      - ./web/mysite:/usr/src/app/
     env_file: .env
     environment:
       - DEBUG=true
